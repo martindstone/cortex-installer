@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "thalamus"
+version = "0.1.0"
+description = ""
+authors = ["Martin Stone <martin.stone@cortex.io>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+ruamel-yaml = "^0.18.6"
+requests = "^2.32.3"
+textual = "^0.76.0"
+pyjwt = "^2.9.0"
+click = "^8.1.7"
+
+[tool.poetry.scripts]
+install-cortex = "thalamus.main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

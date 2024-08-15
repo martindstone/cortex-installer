@@ -1,0 +1,363 @@
+image:
+  version: 0.0.329
+  pullPolicy: IfNotPresent
+  secrets:
+  - name: cortex-docker-registry-secret
+helmConfiguration:
+  nameOverride: ''
+  fullnameOverride: ''
+app:
+  # You can only change this before installation
+  # We'll help you update these during productionalization.
+  initialConfiguration:
+    defaultEmail: demo@getcortexapp.com
+    workspace: demo
+
+  # Change this to "prod" for productionalizing
+  mode: demo
+  springProfilesActive: prod
+
+  service:
+    type: ClusterIP # Can be NodePort, LoadBalancer, or ClusterIP
+
+  serviceAccount:
+    enabled: false
+
+  ingress:
+    type: nginx # Can be nginx or gcp
+    staticIpName: ''
+    internalStaticIpName: ''
+
+  # ================ Hosted DATABASE (ex: RDS, Cloud SQL) + Other credentials =====================
+  # Uncomment the following if you want to use a k8s secret for env vars
+  # to hydrate the env vars for the backend.
+  # Usually this is used for pointing to a hosted DB instance.
+
+  # secret: cortex-secret
+
+  # Change this to the hosts that this application will be available by, eg (app|api).cortex.internal.yourdomain.com
+  hostnames:
+    frontend: app.helm.getcortexapp.com
+    backend: api.helm.getcortexapp.com
+    internal: ''
+
+    # Only change this if your load balancer/ingress setup provides TLS by default.
+    # This does not actually set up TLS, but instead is used for URL generation
+    protocol: http
+
+  # ================ Cortex API (AI) Configuration =====================
+  ai:
+    enabled: false
+    image:
+      repository: ghcr.io/cortexapps/brain-ai
+      version: latest
+    # We recommend 2 replicas for the ai, unless you have memory constraints on the cluster
+    replicaCount: 1
+
+    # Configures JVM options.
+    jvmConfiguration:
+      # Sets the max heap to 768m (0.75 * resources.requests.memory).
+      # WARNING: If you set a resource LIMIT for memory, add a max heap, such as -Xmx[max]m,
+      #          where max = ~0.75 * resources.limits.memory
+      #          For example, JAVA_OPTS: "-Xms512m -Xmx768m"
+      # WARNING 2: Java by default sets the max heap to only 1/4 the available memory on the machine
+      #            As a result, we highly recommend you set a max heap configuration (the Xmx flag)
+      #            to something reasonable based on your machine size
+      javaOpts: -Xms512m -Xmx3072m
+
+    # If you have hostnames that don't automatically resolve from the container,
+    # you can add aliases. This is a list of IP -> hostname[] mappings.
+    # https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/
+    hostAliases:
+    # - ip: "127.0.0.1"
+    #   hostnames:
+    #   - "foo.local"
+    #   - "bar.local"
+
+    # Any additional environment variables you want to set for the backend
+    envVars:
+    containerConfiguration:
+      livenessProbe:
+        httpGet:
+          path: /actuator/health
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+      readinessProbe:
+        httpGet:
+          path: /actuator/health
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+
+      # This block is placed as-is in the backend deployment configuration.
+      # WARNING: If you change the limits or requests, update the corresponding
+      # JVM configuration.
+      # If you change the requests field, update the minHeap.
+      # If you change the limits, set+update the maxHeap (usually 3/4 the memory limit)
+      # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#example-1
+      resources:
+        requests:
+          memory: 2Gi
+          cpu: '2'
+        limits:
+          memory: 4Gi
+          cpu: '4'
+
+    # If you have internal tools that require self-signed certs, you can add the certificate to a secret.
+    # The key in the secret should be named "tls.crt".
+    # The value should be the contents of the certificate.
+    selfSignedCerts:
+      enable: false
+      secret: tls-secret
+    # hikari max pool size
+    hikariMaxPoolSize: 20
+
+  # ================ Cortex API (Backend) Configuration =====================
+  backend:
+    image:
+      repository: ghcr.io/cortexapps/brain-backend/cortex-onprem-backend
+    # We recommend 2 replicas for the backend, unless you have memory constraints on the cluster
+    replicaCount: 2
+
+    # Configures JVM options.
+    jvmConfiguration:
+      # Sets the max heap to 768m (0.75 * resources.requests.memory).
+      # WARNING: If you set a resource LIMIT for memory, add a max heap, such as -Xmx[max]m,
+      #          where max = ~0.75 * resources.limits.memory
+      #          For example, JAVA_OPTS: "-Xms512m -Xmx768m"
+      # WARNING 2: Java by default sets the max heap to only 1/4 the available memory on the machine
+      #            As a result, we highly recommend you set a max heap configuration (the Xmx flag)
+      #            to something reasonable based on your machine size
+      javaOpts: -Xms512m -Xmx12288m
+
+    # If you have hostnames that don't automatically resolve from the container,
+    # you can add aliases. This is a list of IP -> hostname[] mappings.
+    # https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/
+    hostAliases:
+    # - ip: "127.0.0.1"
+    #   hostnames:
+    #   - "foo.local"
+    #   - "bar.local"
+
+    # Any additional environment variables you want to set for the backend
+    envVars:
+    containerConfiguration:
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+
+      # This block is placed as-is in the backend deployment configuration.
+      # WARNING: If you change the limits or requests, update the corresponding
+      # JVM configuration.
+      # If you change the requests field, update the minHeap.
+      # If you change the limits, set+update the maxHeap (usually 3/4 the memory limit)
+      # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#example-1
+      resources:
+        requests:
+          memory: 8Gi
+          cpu: '2'
+        limits:
+          memory: 16Gi
+          cpu: '4'
+
+    # If you have internal tools that require self signed certs, you can add the certificate to a secret.
+    # The key in the secret should be named "tls.crt".
+    # The value should be the contents of the certificate.
+    selfSignedCerts:
+      enable: false
+      secret: tls-secret
+    # hikari max pool size
+    hikariMaxPoolSize: 20
+  # ================ Cortex API (Worker) Configuration =====================
+  worker:
+    enabled: true
+    image:
+      repository: ghcr.io/cortexapps/brain-backend/cortex-onprem-backend
+    replicaCount: 2
+    jvmConfiguration:
+      javaOpts: -Xms512m -Xmx6144m
+
+    # Any additional environment variables you want to set for the worker
+    envVars:
+    containerConfiguration:
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+      resources:
+        requests:
+          memory: 4Gi
+          cpu: '2'
+        limits:
+          memory: 8Gi
+          cpu: '4'
+    selfSignedCerts:
+      enable: false
+      secret: tls-secret
+    # hikari max pool size
+    hikariMaxPoolSize: 20
+
+  # ================ Cortex Api Configuration =====================
+  # Used to configure the public api if we want to deploy this separate from brain-backend.
+  # Disabled by default
+  api:
+    enabled: false
+    image:
+      repository: ghcr.io/cortexapps/brain-backend/cortex-onprem-backend
+    replicaCount: 1
+    jvmConfiguration:
+      javaOpts: -Xms512m -Xmx6144m
+
+    # Any additional environment variables you want to set for the api
+    envVars:
+    containerConfiguration:
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+
+      # This block is placed as-is in the api deployment configuration.
+      # WARNING: If you change the limits or requests, update the corresponding
+      # JVM configuration.
+      # If you change the requests field, update the minHeap.
+      # If you change the limits, set+update the maxHeap (usually 3/4 the memory limit)
+      # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#example-1
+      resources:
+        requests:
+          memory: 8Gi
+          cpu: '2'
+        limits:
+          memory: 16Gi
+          cpu: '4'
+
+    # If you have internal tools that require self signed certs, you can add the certificate to a secret.
+    # The key in the secret should be named "tls.crt".
+    # The value should be the contents of the certificate.
+    selfSignedCerts:
+      enable: false
+      secret: tls-secret
+    hikariMaxPoolSize: 20
+
+
+  # ================ Cortex Graph Configuration =====================
+  # Not yet supported
+  graph:
+    enabled: false
+    serviceAccountName: backend-sa
+    image:
+      repository: ghcr.io/cortexapps/brain-backend/cortex-onprem-graph
+    replicaCount: 2
+    jvmConfiguration:
+      javaOpts: -Xms768m -Xmx3144m
+    envVars:
+    hikariMaxPoolSize: 20
+
+    containerConfiguration:
+      resources:
+        requests:
+          cpu: '2'
+          memory: 4Gi
+          ephemeral-storage: 10Gi
+        limits:
+          cpu: '4'
+          memory: 4Gi
+          ephemeral-storage: 10Gi
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8099
+        initialDelaySeconds: 100
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8099
+        initialDelaySeconds: 300
+        periodSeconds: 10
+        timeoutSeconds: 6
+        failureThreshold: 5
+
+    # If you have internal tools that require self signed certs, you can add the certificate to a secret.
+    # The key in the secret should be named "tls.crt".
+    # The value should be the contents of the certificate.
+    selfSignedCerts:
+      enable: false
+      secret: tls-secret
+
+  # ================ Cortex App (Frontend) Configuration =====================
+  # Used to configure the frontend app, which is a static react application served by
+  # an nginx image.
+  frontend:
+    enabled: true
+    image:
+      repository: ghcr.io/cortexapps/brain-app/cortex-onprem-frontend
+    nginx:
+      port: 8080
+
+  # ================ Built in EPHEMERAL Postgres DB configuration (no PV) =====================
+  postgres:
+    # Used for the out-of-the-box ephemeral db shipped with this helm chart. You can remove this
+    # if using a hosted postgres instance.
+    builtIn:
+      enable: true
+      name: braindb
+      username: cortex
+      password: random1234
+
+  # ================ Built in EPHEMERAL Postgres DB configuration (no PV) =====================
+  aiPostgres:
+    # Used for the out-of-the-box ephemeral db shipped with this helm chart. You can remove this
+    # if using a hosted postgres instance.
+    builtIn:
+      enable: false
+      name: brain-ai-vector-store
+      username: cortex
+      password: random1234
+
+  portForward:
+  #app: 8080
+  #api: 8081
